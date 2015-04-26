@@ -18,18 +18,41 @@ import java.util.Stack;
  * @author Jakub
  */
 public class Interpreter {
+    private static class StackFrame {
+        private final int startingAddress;
+        private int allocatedVariables = 0;
+        
+        public StackFrame(int startingAddress)
+        {
+            this.startingAddress = startingAddress;
+        }
+        
+        public int getStartingAddress()
+        {
+            return this.startingAddress;
+        }
+        public int getAllocatedVariables()
+        {
+            return this.allocatedVariables;
+        }
+        public void incrementAllocatedVariables()
+        {
+            this.allocatedVariables++;
+        }
+    }
+    
     private final List<Variable> programStack = new ArrayList<Variable>();
     
     private final List<Instruction> instructions;
     private int instructionIndex = 0;
     
-    private final Stack<Integer> stackFrames = new Stack<Integer>();
+    private final Stack<StackFrame> stackFrames = new Stack<StackFrame>();
     private final int maxStackSize;
     
     public Interpreter(List<Instruction> instructions, int maxStackSize)
     {
         this.instructions = instructions;
-        this.stackFrames.add(0);
+        this.stackFrames.add(new StackFrame(0));
         this.maxStackSize = maxStackSize;
     }
     
@@ -78,7 +101,11 @@ public class Interpreter {
     }
     private Variable getVariable(int address)
     {
-        return this.programStack.get(this.stackFrames.peek() + address);
+        return this.programStack.get(this.stackFrames.peek().getStartingAddress() + address);
+    }
+    private StackFrame getStackFrame()
+    {
+        return this.stackFrames.peek();
     }
     
     private void handleInstruction(Instruction instruction) throws InterpretException
@@ -196,8 +223,22 @@ public class Interpreter {
     private void handleDeclare(Instruction instruction) throws InterpretException
     {
         DataType type = (DataType) instruction.arguments.get(0);
+        int allocatedVariables = this.getStackFrame().getAllocatedVariables();
+        int stackSize = this.programStack.size() - this.getStackFrame().getStartingAddress();
+        Stack<Variable> tmpStack = new Stack<Variable>();
+        
+        for (int i = 0; i < stackSize - allocatedVariables; i++)
+        {
+            tmpStack.push(this.pop());
+        }
         
         this.push(new Variable(type));
+        this.getStackFrame().incrementAllocatedVariables();
+        
+        for (int i = 0; i < stackSize - allocatedVariables; i++)
+        {
+            this.push(tmpStack.pop());
+        }
     }
     private void handleLoad(Instruction instruction) throws InterpretException
     {
@@ -320,7 +361,7 @@ public class Interpreter {
         }
         
         int parameterCount = Integer.parseInt(instruction.arguments.get(0).toString());
-        this.stackFrames.push(this.programStack.size() - parameterCount);
+        this.stackFrames.push(new StackFrame(this.programStack.size() - parameterCount));
     }
     private void handleDestroyFrame(Instruction instruction) throws InterpretException
     {
