@@ -373,6 +373,7 @@ Expression UnaryExpression() :
     Token operator = new Token(), identifier, lparen;
     Literal literal;
     Expression exp;
+    UnaryExpression unaryExpression;
 }
 {
     (
@@ -383,30 +384,33 @@ Expression UnaryExpression() :
         (
             lparen = <LPAREN> exp = Expression() <RPAREN>
             {
-                return new UnaryExpression(lparen.beginLine, lparen.beginColumn, exp, UnaryOperator.getFromString(operator.image));
+                unaryExpression = new UnaryExpression(lparen.beginLine, lparen.beginColumn, exp, UnaryOperator.getFromString(operator.image));
             }
         ) |
         (
             literal = Literal()
             {
-                return new UnaryExpression(literal.getLine(), literal.getColumn(), literal, UnaryOperator.getFromString(operator.image));
+                unaryExpression = new UnaryExpression(literal.getLine(), literal.getColumn(), literal, UnaryOperator.getFromString(operator.image));
             }
         ) |
         LOOKAHEAD(2)
         (
             exp = FunctionCallExpression()
             {
-                return exp;
+                unaryExpression = new UnaryExpression(exp.getLine(), exp.getColumn(), exp, UnaryOperator.getFromString(operator.image));
             }
         ) |
         (
             identifier = <IDENTIFIER>
             {
-                return new UnaryExpression(identifier.beginLine, identifier.beginColumn,
+                unaryExpression = new UnaryExpression(identifier.beginLine, identifier.beginColumn,
                                            new IdentifierExpression(identifier.beginLine, identifier.beginColumn, identifier.image), UnaryOperator.getFromString(operator.image));
             }
         )
     )
+    {
+        return unaryExpression;
+    }
 }
 
 Literal Literal() :

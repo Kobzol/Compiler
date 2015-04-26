@@ -10,3 +10,10 @@ begin
 end;
 
 write factorial(5);*/
+
+int get_one()
+begin
+  return 1;
+end;
+
+write -get_one();

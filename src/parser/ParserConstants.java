@@ -99,13 +99,17 @@ public interface ParserConstants {
   /** RegularExpression Id. */
   int MINUS = 52;
   /** RegularExpression Id. */
-  int STAR = 53;
+  int INCREMENT = 53;
   /** RegularExpression Id. */
-  int SLASH = 54;
+  int DECREMENT = 54;
   /** RegularExpression Id. */
-  int REM = 55;
+  int STAR = 55;
   /** RegularExpression Id. */
-  int DOT = 56;
+  int SLASH = 56;
+  /** RegularExpression Id. */
+  int REM = 57;
+  /** RegularExpression Id. */
+  int DOT = 58;
 
   /** Lexical state. */
   int DEFAULT = 0;
@@ -169,6 +173,8 @@ public interface ParserConstants {
     "\"&&\"",
     "\"+\"",
     "\"-\"",
+    "\"++\"",
+    "\"--\"",
     "\"*\"",
     "\"/\"",
     "\"%\"",
