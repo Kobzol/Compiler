@@ -1,0 +1,12 @@
+// initializers, functions, multi line comments, empty fors, multiple if branches, while loop
+
+/*int factorial(int a)
+begin
+  if (a == 0) then
+    return 1;
+  else
+    return factorial(a - 1) * a;
+  end;
+end;
+
+write factorial(5);*/

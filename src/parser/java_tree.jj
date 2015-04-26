@@ -1,0 +1,760 @@
+/* Copyright (c) 2006, Sun Microsystems, Inc.
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *     * Neither the name of the Sun Microsystems, Inc. nor the names of its
+ *       contributors may be used to endorse or promote products derived from
+ *       this software without specific prior written permission.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ * THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+options {
+  JAVA_UNICODE_ESCAPE = true;
+  STATIC = false;
+  DEBUG_PARSER = false;
+  DEBUG_TOKEN_MANAGER = false;
+}
+
+PARSER_BEGIN(Parser)
+
+package parser;
+
+import interpret.*;
+import tree.*;
+import tree.expression.*;
+import tree.statement.*;
+
+public class Parser {
+
+}
+
+PARSER_END(Parser)
+
+
+/* WHITE SPACE */
+
+SKIP :
+{
+  " " | "\t" | "\n" | "\r" | "\f"
+}
+
+/* COMMENTS */
+
+MORE :
+{
+  "//" : IN_SINGLE_LINE_COMMENT | 
+  "/*" : IN_MULTI_LINE_COMMENT
+}
+
+<IN_SINGLE_LINE_COMMENT>
+SPECIAL_TOKEN :
+{
+  <SINGLE_LINE_COMMENT: "\n" | "\r" | "\r\n" > : DEFAULT
+}
+
+<IN_MULTI_LINE_COMMENT>
+SPECIAL_TOKEN :
+{
+  <MULTI_LINE_COMMENT: "*/" > : DEFAULT
+}
+
+<IN_SINGLE_LINE_COMMENT, IN_MULTI_LINE_COMMENT>
+MORE :
+{
+  < ~[] >
+}
+
+/* RESERVED WORDS AND LITERALS */
+
+TOKEN :
+{
+  < BOOLEAN: "boolean" >
+| < INT: "int" >
+| < FLOAT: "float" >
+| < STRING: "String" >
+| < IF: "if" >
+| < THEN: "then" >
+| < ELSE: "else" >
+| < ELSE_IF: "else if" >
+| < FOR: "for" >
+| < WHILE: "while" >
+| < BEGIN: "begin" >
+| < END: "end" >
+| < READ: "read" >
+| < WRITE: "write" >
+| < RETURN: "return" >
+}
+
+/* LITERALS */
+
+TOKEN :
+{
+  < INTEGER_LITERAL: ("0" | <DECIMAL_LITERAL>) >
+|
+  < #DECIMAL_LITERAL: ["1"-"9"] (["0"-"9"])* >
+|
+  < FLOATING_POINT_LITERAL:
+        (["0"-"9"])+ "." (["0"-"9"])* (<EXPONENT>)?
+      | "." (["0"-"9"])+ (<EXPONENT>)?
+      | (["0"-"9"])+ <EXPONENT>
+  >
+|
+  < #EXPONENT: ["e","E"] (["+","-"])? (["0"-"9"])+ >
+|
+  < STRING_LITERAL: "\"" (~["\"", "\n", "\r"])* "\"">
+|
+  < BOOLEAN_LITERAL: ("True" | "False") >
+}
+
+/* IDENTIFIERS */
+
+TOKEN :
+{
+  < IDENTIFIER: <LETTER> (<PART_LETTER>)* >
+|
+  < #LETTER:
+      ["$", "A"-"Z", "_", "a"-"z"]
+  >
+|
+  < #PART_LETTER:
+      ["$","0"-"9","A"-"Z","_","a"-"z"]
+  >
+}
+
+/* SEPARATORS */
+
+TOKEN :
+{
+  < LPAREN: "(" >
+| < RPAREN: ")" >
+| < SEMICOLON: ";" >
+| < COMMA: "," >
+}
+
+/* OPERATORS */
+
+TOKEN :
+{
+  < ASSIGN: "=" >
+| < GT: ">" >
+| < LT: "<" >
+| < BANG: "!" >
+| < QUESTION: "?" >
+| < COLON: ":" >
+| < EQ: "==" >
+| < LE: "<=" >
+| < GE: ">=" >
+| < NE: "!=" >
+| < OR: "||" >
+| < AND: "&&" >
+| < PLUS: "+" >
+| < MINUS: "-" >
+| < STAR: "*" >
+| < SLASH: "/" >
+| < REM: "%" >
+| < DOT: "." >
+}
+
+/*
+ * Program structuring syntax follows.
+ */
+
+BlockStatement Start() : 
+{
+    BlockStatement bs;
+}
+{
+    bs = OuterStatement()
+    <EOF>
+    {
+        return bs;
+    }
+}
+
+BlockStatement OuterStatement() :
+{
+    BlockStatement bs = new BlockStatement(0, 0);
+    Statement tmp;
+}
+{
+    (
+        (LOOKAHEAD(3) tmp = FunctionStatement() | tmp = Statement())
+        {
+            bs.addStatement(tmp);
+        }
+    )*
+    {
+        return bs;
+    }
+}
+
+BlockStatement BlockStatement() :
+{
+    BlockStatement bs = null;
+    Statement tmp;
+}
+{
+    (tmp = Statement()
+    {
+        if (bs == null)
+        {
+            bs = new BlockStatement(tmp.getLine(), tmp.getColumn());
+        }
+        bs.addStatement(tmp);
+    })*
+    {
+        return bs;
+    }
+}
+
+/*
+ * Expression syntax follows.
+ */
+
+Expression Expression() :
+{
+    Expression tmp;
+}
+{ 
+    (LOOKAHEAD(2) tmp = Assignment() | LOOKAHEAD(2) tmp = ConditionalExpression())
+    {
+        return tmp;
+    }
+}
+
+Expression Assignment() :
+{
+    Token identifier;
+    Expression exp;
+}
+{
+    identifier=<IDENTIFIER> <ASSIGN> exp = Expression()
+    {
+        return new AssignmentExpression(identifier.beginLine, identifier.beginColumn, identifier.image, exp);
+    }
+}
+
+Expression ConditionalExpression() :
+{
+    Expression result, firstAlternative = null, secondAlternative = null;
+}
+{
+  result = ConditionalOrExpression() [ <QUESTION> firstAlternative = Expression() <COLON> secondAlternative = ConditionalExpression() ]
+  {
+    if (firstAlternative == null)
+    {
+        return result;
+    }
+    else return new ConditionalExpression(result.getLine(), result.getColumn(), result, firstAlternative, secondAlternative);
+  }
+}
+
+Expression ConditionalOrExpression() :
+{
+    Expression result, tmp = null;
+}
+{
+    result = ConditionalAndExpression()
+    (
+        <OR>
+        tmp = ConditionalAndExpression()
+        {
+            result = new BinaryExpression(result.getLine(), result.getColumn(), result, tmp, BinaryOperator.OR);
+        }
+    )*
+    {
+        return result;
+    }
+}
+
+Expression ConditionalAndExpression() :
+{
+    Expression result, tmp;
+}
+{
+    result = RelationalExpression()
+    (
+        <AND>
+        tmp = RelationalExpression()
+        {
+            result = new BinaryExpression(result.getLine(), result.getColumn(), result, tmp, BinaryOperator.AND);
+        }
+    )*
+    {
+        return result;
+    }
+}
+
+Expression RelationalExpression() :
+{
+    Token operator;
+    Expression result, tmp = null;
+}
+{
+    result = AdditiveExpression()
+    (
+        (
+            (operator=<LT> | operator=<GT> | operator=<LE> | operator=<GE> | operator=<EQ> | operator=<NE> )
+        )
+        tmp = AdditiveExpression()
+        {
+            result = new BinaryExpression(result.getLine(), result.getColumn(), result, tmp, BinaryOperator.getFromString(operator.image));
+        }
+    )*
+
+    {
+        return result;
+    }
+}
+
+Expression AdditiveExpression() :
+{
+     Token operator;
+     Expression result, tmp = null;
+}
+{
+    result = MultiplicativeExpression()
+    (
+        (
+            (operator=<PLUS> | operator=<MINUS> | operator=<DOT>)
+        )
+        tmp = MultiplicativeExpression()
+        {
+            result = new BinaryExpression(result.getLine(), result.getColumn(), result, tmp, BinaryOperator.getFromString(operator.image));
+        }
+    )*
+    {
+        return result;
+    }
+}
+
+Expression MultiplicativeExpression() :
+{
+    Token operator;
+    Expression result, tmp = null;
+}
+{
+    result = UnaryExpression()
+    (
+        (
+            (operator=<STAR> | operator=<SLASH> | operator=<REM>)
+        )
+        tmp = UnaryExpression()
+        {
+            result = new BinaryExpression(result.getLine(), result.getColumn(), result, tmp, BinaryOperator.getFromString(operator.image));
+        }
+    )*
+    {
+        return result;
+    }
+}
+
+Expression UnaryExpression() :
+{
+    Token operator = new Token(), identifier, lparen;
+    Literal literal;
+    Expression exp;
+}
+{
+    (
+        (operator = <BANG> | operator = <MINUS>)
+    )?
+
+    (
+        (
+            lparen = <LPAREN> exp = Expression() <RPAREN>
+            {
+                return new UnaryExpression(lparen.beginLine, lparen.beginColumn, exp, UnaryOperator.getFromString(operator.image));
+            }
+        ) |
+        (
+            literal = Literal()
+            {
+                return new UnaryExpression(literal.getLine(), literal.getColumn(), literal, UnaryOperator.getFromString(operator.image));
+            }
+        ) |
+        LOOKAHEAD(2)
+        (
+            exp = FunctionCallExpression()
+            {
+                return exp;
+            }
+        ) |
+        (
+            identifier = <IDENTIFIER>
+            {
+                return new UnaryExpression(identifier.beginLine, identifier.beginColumn,
+                                           new IdentifierExpression(identifier.beginLine, identifier.beginColumn, identifier.image), UnaryOperator.getFromString(operator.image));
+            }
+        )
+    )
+}
+
+Literal Literal() :
+{
+    Token literal;
+}
+{
+    (literal=<INTEGER_LITERAL> | literal=<FLOATING_POINT_LITERAL> | literal=<STRING_LITERAL> | literal=<BOOLEAN_LITERAL>)
+    {
+        DataType type = DataType.BOOLEAN;
+        
+        switch(literal.kind)
+        {
+            case ParserConstants.INTEGER_LITERAL:
+                type = DataType.INTEGER; break;
+            case ParserConstants.FLOATING_POINT_LITERAL:
+                type = DataType.FLOAT; break;
+            case ParserConstants.STRING_LITERAL:
+                type = DataType.STRING; break;
+        }
+
+        return new Literal(literal.beginLine, literal.beginColumn, type, literal.image);
+    }
+}
+
+/*
+ * Statement syntax follows.
+ */
+
+Statement Statement() :
+{
+    Statement result = null;
+    Expression exp;
+}
+{
+(
+  result = EmptyStatement()
+|
+  result = ReturnStatement()
+|
+  result = VariableDeclaration()
+|
+  result = IOStatement()
+|
+  exp = Expression()";"
+  {
+    return new ExpressionStatement(exp.getLine(), exp.getColumn(), exp);
+  }
+|
+  result = IfStatement()
+|
+  result = ForStatement()
+|
+  result = WhileStatement()
+)
+{
+    return result;
+}
+}
+
+Statement VariableDeclaration() :
+{
+    Token type;
+    DeclarationStatement declaration;
+    Expression expression = null;
+    String identifier;
+    DataType dataType;
+}
+{
+    type = Type()
+    {
+        dataType = DataType.fromString(type.image);
+        declaration = new DeclarationStatement(type.beginLine, type.beginColumn, dataType);
+    }
+    identifier = VariableIdentifier(dataType) [ <ASSIGN> expression = Expression() ]
+    {
+        declaration.addIdentifier(identifier, expression);
+        expression = null;
+    }
+    (
+        <COMMA> identifier = VariableIdentifier(dataType) [ <ASSIGN> expression = Expression() ]
+        {
+            declaration.addIdentifier(identifier, expression);
+            expression = null;
+        }
+    )* <SEMICOLON>
+    {
+        return declaration;
+    }
+}
+
+Token Type() :
+{
+    Token type;
+}
+{
+    (type=< BOOLEAN > | type=< FLOAT > | type=< INT > | type=< STRING >)
+    {
+        return type;
+    }
+}
+
+String VariableIdentifier(DataType type) :
+{
+    Token identifier;
+}
+{
+    identifier=<IDENTIFIER>
+    {
+        return identifier.image;
+    }
+}
+
+Statement EmptyStatement() :
+{
+    Token token;
+}
+{
+    token = <SEMICOLON>
+    {
+        return new EmptyStatement(token.beginLine, token.beginColumn);
+    }
+}
+
+Statement IOStatement() :
+{
+    Statement statement;
+}
+{
+    (statement = ReadStatement() | statement = WriteStatement())
+    {
+        return statement;
+    }
+}
+
+Statement ReadStatement() :
+{
+    ReadStatement statement;
+    String identifier;
+    Token token;
+}
+{
+    token = <READ>
+    {
+        statement = new ReadStatement(token.beginLine, token.beginColumn);
+    }
+    identifier = ReadIdentifier()
+    {
+        statement.addIdentifier(identifier);
+    }
+    (
+        <COMMA> identifier = ReadIdentifier()
+        {
+            statement.addIdentifier(identifier);
+        }
+    )*<SEMICOLON>
+    {
+        return statement;
+    }
+}
+
+String ReadIdentifier() :
+{
+    Token identifier;
+}
+{
+    identifier=<IDENTIFIER>
+    {
+        return identifier.image;
+    }
+}
+
+Statement WriteStatement() :
+{
+    WriteStatement statement;
+    Expression expression;
+    Token token;
+}
+{
+    token = <WRITE>
+    {
+        statement = new WriteStatement(token.beginLine, token.beginColumn);
+    }
+    expression = Expression()
+    {
+        statement.addExpression(expression);
+    }
+    (
+        <COMMA> expression = Expression()
+        {
+            statement.addExpression(expression);
+        }
+    )*<SEMICOLON>
+    {
+        return statement;
+    }
+}
+
+Statement IfStatement() :
+{
+    Expression condition;
+    IfStatement ifStatement;
+    BlockStatement statements, elseBlock;
+    Token token;
+}
+{
+    token = <IF>
+    {
+        ifStatement = new IfStatement(token.beginLine, token.beginColumn);
+    }
+    <LPAREN> condition = Expression() <RPAREN> <THEN> statements = BlockStatement()
+    {
+        ifStatement.addBranch(condition, statements);
+    }
+    (
+        <ELSE_IF> <LPAREN> condition = Expression() <RPAREN> <THEN> statements = BlockStatement()
+        {
+            ifStatement.addBranch(condition, statements);
+        }
+    )*
+    [
+        <ELSE> elseBlock = BlockStatement()
+        {
+            ifStatement.setElseBlock(elseBlock);
+        }
+    ]
+    <END><SEMICOLON>
+    {
+        return ifStatement;
+    }
+}
+
+Statement ForStatement() :
+{
+    Expression initializer = null, condition = null, increment = null;
+    BlockStatement statements;
+    Token token;
+}
+{
+    token = <FOR> <LPAREN> [ initializer = Expression() ] <SEMICOLON> [ condition = Expression() ] <SEMICOLON> [ increment = Expression() ] <RPAREN> <BEGIN> statements = BlockStatement() <END><SEMICOLON>
+    {
+        return new ForStatement(token.beginLine, token.beginColumn, initializer, condition, increment, statements);
+    }
+}
+
+Statement FunctionStatement() :
+{
+    Token type, identifier, begin;
+    BlockStatement blockStatement;
+    FunctionStatement functionStatement = null;
+    Symbol parameter;
+}
+{
+    type = Type() identifier = <IDENTIFIER>
+    {
+        functionStatement = new FunctionStatement(type.beginLine, type.beginColumn, DataType.fromString(type.image), identifier.image);
+    }
+    <LPAREN>
+    [
+        parameter = FunctionParameter()
+        {
+            functionStatement.addParameter(parameter);
+        }
+        (
+            <COMMA> parameter = FunctionParameter()
+            {
+                functionStatement.addParameter(parameter);
+            }
+        )*
+    ]
+    <RPAREN>
+    begin = <BEGIN>
+        blockStatement = BlockStatement()
+        {
+            functionStatement.setBlockStatement(blockStatement);
+        }
+    <END><SEMICOLON>
+    {
+        return functionStatement;
+    }
+}
+
+Statement ReturnStatement() :
+{
+    Token token;
+    Expression expression;
+}
+{
+    token = <RETURN> expression = Expression() <SEMICOLON>
+    {
+        return new ReturnStatement(token.beginLine, token.beginColumn, expression);
+    }
+}
+
+Symbol FunctionParameter() :
+{
+    Token type;
+    Token identifier;
+}
+{
+    type = Type() identifier = <IDENTIFIER>
+    {
+        return new Symbol(identifier.image, DataType.fromString(type.image));
+    }
+}
+
+Expression FunctionCallExpression() :
+{
+    Token identifier;
+    FunctionCallExpression functionCallExpression = null;
+    Expression parameter;
+}
+{
+    identifier = <IDENTIFIER>
+    <LPAREN>
+    {
+        functionCallExpression = new FunctionCallExpression(identifier.beginLine, identifier.beginColumn, identifier.image);
+    }
+    [
+        parameter = Expression()
+        {
+            functionCallExpression.addParameter(parameter);
+        }
+        (
+            <COMMA> parameter = Expression()
+            {
+                functionCallExpression.addParameter(parameter);
+            }
+        )*
+    ]
+    <RPAREN>
+    {
+        return functionCallExpression;
+    }
+}
+
+Statement WhileStatement() :
+{
+    Token token;
+    Expression condition;
+    BlockStatement blockStatement;
+}
+{
+    token = <WHILE> <LPAREN> condition = Expression() <RPAREN>
+    <BEGIN>
+        blockStatement = BlockStatement()
+    <END><SEMICOLON>
+    {
+        return new WhileStatement(token.beginLine, token.beginColumn, condition, blockStatement);
+    }
+}

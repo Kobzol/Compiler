@@ -1,0 +1,492 @@
+/* Copyright (c) 2006, Sun Microsystems, Inc.
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *     * Neither the name of the Sun Microsystems, Inc. nor the names of its
+ *       contributors may be used to endorse or promote products derived from
+ *       this software without specific prior written permission.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+ * THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+
+options {
+  JAVA_UNICODE_ESCAPE = true;
+  STATIC = false;
+  DEBUG_PARSER = false;
+  DEBUG_TOKEN_MANAGER = false;
+}
+
+PARSER_BEGIN(Parser)
+
+import interpret.*;
+
+public class Parser {
+  private SemanticAnalyzer semanticAnalyzer = new SemanticAnalyzer();
+
+  public SemanticAnalyzer getSemanticAnalyzer()
+  {
+    return this.semanticAnalyzer;
+  }
+}
+
+PARSER_END(Parser)
+
+
+/* WHITE SPACE */
+
+SKIP :
+{
+  " " | "\t" | "\n" | "\r" | "\f"
+}
+
+/* COMMENTS */
+
+MORE :
+{
+  "//" : IN_SINGLE_LINE_COMMENT
+}
+
+<IN_SINGLE_LINE_COMMENT>
+SPECIAL_TOKEN :
+{
+  <SINGLE_LINE_COMMENT: "\n" | "\r" | "\r\n" > : DEFAULT
+}
+
+<IN_SINGLE_LINE_COMMENT>
+MORE :
+{
+  < ~[] >
+}
+
+/* RESERVED WORDS AND LITERALS */
+
+TOKEN :
+{
+  < BOOLEAN: "boolean" >
+| < INT: "int" >
+| < FLOAT: "float" >
+| < STRING: "String" >
+| < IF: "if" >
+| < THEN: "then" >
+| < ELSE: "else" >
+| < FOR: "for" >
+| < BEGIN: "begin" >
+| < END: "end" >
+| < READ: "read" >
+| < WRITE: "write" >
+}
+
+/* LITERALS */
+
+TOKEN :
+{
+  < INTEGER_LITERAL: ("0" | <DECIMAL_LITERAL>) >
+|
+  < #DECIMAL_LITERAL: ["1"-"9"] (["0"-"9"])* >
+|
+  < FLOATING_POINT_LITERAL:
+        (["0"-"9"])+ "." (["0"-"9"])* (<EXPONENT>)?
+      | "." (["0"-"9"])+ (<EXPONENT>)?
+      | (["0"-"9"])+ <EXPONENT>
+  >
+|
+  < #EXPONENT: ["e","E"] (["+","-"])? (["0"-"9"])+ >
+|
+  < STRING_LITERAL: "\"" (~["\"", "\n", "\r"])* "\"">
+|
+  < BOOLEAN_LITERAL: ("True" | "False") >
+}
+
+/* IDENTIFIERS */
+
+TOKEN :
+{
+  < IDENTIFIER: <LETTER> (<PART_LETTER>)* >
+|
+  < #LETTER:
+      ["$", "A"-"Z", "_", "a"-"z"]
+  >
+|
+  < #PART_LETTER:
+      ["$","0"-"9","A"-"Z","_","a"-"z"]
+  >
+}
+
+/* SEPARATORS */
+
+TOKEN :
+{
+  < LPAREN: "(" >
+| < RPAREN: ")" >
+| < SEMICOLON: ";" >
+| < COMMA: "," >
+| < DOT: "." >
+}
+
+/* OPERATORS */
+
+TOKEN :
+{
+  < ASSIGN: "=" >
+| < GT: ">" >
+| < LT: "<" >
+| < BANG: "!" >
+| < QUESTION: "?" >
+| < COLON: ":" >
+| < EQ: "==" >
+| < LE: "<=" >
+| < GE: ">=" >
+| < NE: "!=" >
+| < OR: "||" >
+| < AND: "&&" >
+| < PLUS: "+" >
+| < MINUS: "-" >
+| < STAR: "*" >
+| < SLASH: "/" >
+| < REM: "%" >
+}
+
+/*
+ * Program structuring syntax follows.
+ */
+
+void Start() : 
+{}
+{
+    (Statement())+<EOF>
+}
+
+/*
+ * Expression syntax follows.
+ */
+
+void Expression() :
+{}
+{
+  LOOKAHEAD(2)
+  Assignment() | ConditionalExpression()
+}
+
+void Assignment() :
+{
+    Token identifier;
+}
+{
+    identifier=<IDENTIFIER> <ASSIGN> Expression()
+    {
+        this.semanticAnalyzer.saveVariable(identifier.image);
+    }
+}
+
+void ConditionalExpression() :
+{}
+{
+  ConditionalOrExpression() [ <QUESTION> Expression() <COLON> ConditionalExpression() ]
+}
+
+void ConditionalOrExpression() :
+{}
+{
+    ConditionalAndExpression()
+    (
+        <OR>
+        ConditionalAndExpression()
+        {
+            this.semanticAnalyzer.addOperator(InstructionType.OR);
+        }
+    )*
+}
+
+void ConditionalAndExpression() :
+{}
+{
+    RelationalExpression()
+    (
+        <AND>
+        RelationalExpression()
+        {
+            this.semanticAnalyzer.addOperator(InstructionType.AND);
+        }
+    )*
+}
+
+void RelationalExpression() :
+{
+    Token operator;
+}
+{
+    AdditiveExpression()
+    (
+        (
+            (operator=<LT> | operator=<GT> | operator=<LE> | operator=<GE> | operator=<EQ> | operator=<NE> )
+        )
+        AdditiveExpression()
+        {
+            InstructionType type = InstructionType.LT;
+            switch (operator.kind)
+            {
+                case ParserConstants.GT:
+                    type = InstructionType.GT; break;
+                case ParserConstants.LE:
+                    type = InstructionType.LE; break;
+                case ParserConstants.GE:
+                    type = InstructionType.GE; break;
+                case ParserConstants.EQ:
+                    type = InstructionType.EQ; break;
+                case ParserConstants.NE:
+                    type = InstructionType.NE; break;
+            }
+
+            this.semanticAnalyzer.addOperator(type);
+        }
+    )*
+}
+
+void AdditiveExpression() :
+{
+     Token operator;
+}
+{
+    MultiplicativeExpression()
+    (
+        (
+            (operator=<PLUS> | operator=<MINUS> | operator=<DOT>)
+        )
+        MultiplicativeExpression()
+        {
+            InstructionType type = InstructionType.ADD;
+            switch (operator.kind)
+            {
+                case ParserConstants.MINUS:
+                    type = InstructionType.SUB; break;
+                case ParserConstants.DOT:
+                    type = InstructionType.CONCAT; break;
+            }
+
+            this.semanticAnalyzer.addOperator(type);
+        }
+    )*
+}
+
+void MultiplicativeExpression() :
+{
+    Token operator;
+}
+{
+    UnaryExpression()
+    (
+        (
+            (operator=<STAR> | operator=<SLASH> | operator=<REM>)
+        )
+        UnaryExpression()
+        {
+            InstructionType type = InstructionType.MUL;
+            switch (operator.kind)
+            {
+                case ParserConstants.SLASH:
+                    type = InstructionType.DIV; break;
+                case ParserConstants.REM:
+                    type = InstructionType.REM; break;
+            }
+
+            this.semanticAnalyzer.addOperator(type);
+        }
+    )*
+}
+
+void UnaryExpression() :
+{
+    Token operator = null, identifier;
+    Symbol literal;
+}
+{
+    (
+        (operator=<BANG> | operator=<MINUS>)
+    )?
+
+    (
+        (
+            <LPAREN> Expression() <RPAREN>
+        ) |
+        (
+            literal=Literal()
+            {
+                this.semanticAnalyzer.pushLiteral(literal.type, literal.value.toString());
+            }
+        ) |
+        (
+            identifier=<IDENTIFIER>
+            {
+                this.semanticAnalyzer.loadVariable(identifier.image);
+            }
+        )
+    )
+    {
+        if (operator != null)
+        {
+            if (operator.kind == ParserConstants.BANG)
+            {
+                this.semanticAnalyzer.negate();
+            }
+            else if (operator.kind == ParserConstants.MINUS)
+            {
+                this.semanticAnalyzer.unaryMinus();
+            }
+        }
+    }
+}
+
+Symbol Literal() :
+{
+    Token literal;
+}
+{
+    (literal=<INTEGER_LITERAL> | literal=<FLOATING_POINT_LITERAL> | literal=<STRING_LITERAL> | literal=<BOOLEAN_LITERAL>)
+    {
+        DataType type = DataType.BOOLEAN;
+        
+        switch(literal.kind)
+        {
+            case ParserConstants.INTEGER_LITERAL:
+                type = DataType.INTEGER; break;
+            case ParserConstants.FLOATING_POINT_LITERAL:
+                type = DataType.FLOAT; break;
+            case ParserConstants.STRING_LITERAL:
+                type = DataType.STRING; break;
+        }
+
+        Symbol symbol = new Symbol("", type);
+        symbol.value = literal.image;
+        
+        return symbol;
+    }
+}
+
+DataType Type() :
+{
+    Token type;
+}
+{
+  (type=< BOOLEAN > | type=< FLOAT > | type=< INT > | type=< STRING >)
+  {
+    return DataType.fromType(type.image);
+  }
+}
+
+/*
+ * Statement syntax follows.
+ */
+
+void Statement() :
+{}
+{
+  EmptyStatement()
+|
+  VariableDeclaration()
+|
+  IOStatement()
+|
+  Expression()";"
+|
+  IfStatement()
+|
+  ForStatement()
+}
+
+void VariableDeclaration() :
+{
+    DataType type;
+}
+{
+  type=Type() VariableIdentifier(type) ( <COMMA> VariableIdentifier(type) )* <SEMICOLON>
+}
+
+void VariableIdentifier(DataType type) :
+{
+    Token identifier;
+}
+{
+    identifier=<IDENTIFIER>
+    {
+        this.semanticAnalyzer.declareVariable(type, identifier.image);
+    }
+}
+
+void EmptyStatement() :
+{}
+{
+  <SEMICOLON>
+}
+
+void IOStatement() :
+{}
+{
+    ReadStatement() | WriteStatement()
+}
+
+void ReadStatement() :
+{}
+{
+    <READ> ReadIdentifier() (<COMMA>ReadIdentifier())*<SEMICOLON>
+}
+
+void ReadIdentifier() :
+{
+    Token identifier;
+}
+{
+    identifier=<IDENTIFIER>
+    {
+        this.semanticAnalyzer.readVariable(identifier.image);
+    }
+}
+
+void WriteStatement() :
+{}
+{
+    <WRITE> WriteIdentifier() (<COMMA>WriteIdentifier())*<SEMICOLON>
+}
+
+void WriteIdentifier() :
+{}
+{
+    Expression()
+    {
+        this.semanticAnalyzer.writeVariable();
+    }
+}
+
+void IfStatement() :
+/*
+ * The disambiguating algorithm of JavaCC automatically binds dangling
+ * else's to the innermost if statement.  The LOOKAHEAD specification
+ * is to tell JavaCC that we know what we are doing.
+ */
+{}
+{
+  <IF> <LPAREN> Expression() <RPAREN> <THEN> (Statement())+ <ELSE> (Statement())+ <END><SEMICOLON>
+}
+
+void ForStatement() :
+{}
+{
+  <FOR> <LPAREN> Expression() <SEMICOLON> Expression() <SEMICOLON> Expression() <RPAREN> <BEGIN> (Statement())+ <END><SEMICOLON> 
+}
