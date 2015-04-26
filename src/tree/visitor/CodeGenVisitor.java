@@ -400,7 +400,6 @@ public class CodeGenVisitor extends AbstractVisitor {
                         IdentifierExpression identifier = (IdentifierExpression) unaryExpression.getExpression();
                         VariableInfo variable = this.symbolTable.getVariable(identifier.getIdentifier());
                         
-                        this.instructionGenerator.loadVariable(variable.getAddress());
                         this.instructionGenerator.pushLiteral(DataType.INTEGER, operator == UnaryOperator.INCREMENT ? 1 : -1);
                         this.instructionGenerator.addOperator(InstructionType.ADD);
                         this.instructionGenerator.saveVariable(variable.getAddress());

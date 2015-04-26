@@ -1,4 +1,4 @@
-// initializers, functions, multi line comments, empty fors, multiple if branches, while loop
+// initializers, functions, multi line comments, empty fors, multiple if branches, while loop, postfix increment/decrement
 
 /*int factorial(int a)
 begin
@@ -11,7 +11,5 @@ end;
 
 write factorial(5);*/
 
-for (int a = 0; a < 10; a++)
-begin
-  write a;
-end;
+int a = 5, b = 6, c = 7;
+write a, b, c;

@@ -29,7 +29,8 @@ public class Main {
         {
           parser = new Parser(System.in);
         }
-        else if (args.length == 1) {
+        else if (args.length == 1)
+        {
             try
             {
                 parser = new Parser(new java.io.FileInputStream(args[0]));
@@ -62,11 +63,11 @@ public class Main {
                 System.out.println(error.toString());
             }
             
-            /*int index = 0;
+            int index = 0;
             for (Instruction instruction : codeGen.getInstructions())
             {
                 System.out.println(index++ + ": " + instruction.toString());
-            }*/
+            }
             
             Interpreter interpreter = new Interpreter(codeGen.getInstructions(), 100);
             interpreter.Interpret();
