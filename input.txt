@@ -11,9 +11,7 @@ end;
 
 write factorial(5);*/
 
-int get_one()
+for (int a = 0; a < 10; a++)
 begin
-  return 1;
+  write a;
 end;
-
-write -get_one();

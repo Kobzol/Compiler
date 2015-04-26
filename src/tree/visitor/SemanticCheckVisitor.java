@@ -387,6 +387,11 @@ public class SemanticCheckVisitor extends AbstractVisitor {
         
         try
         {
+            if (unaryExpression.hasTwoOperators())
+            {
+                throw new SemanticException("Unary expression cannot have both prefix and postfix unary operators");
+            }
+            
             UnaryOperator operator = unaryExpression.getUnaryOperator();
             DataType type = unaryExpression.getDataType(this.symbolTable);
 
@@ -406,6 +411,16 @@ public class SemanticCheckVisitor extends AbstractVisitor {
                     {
                         this.reportError(unaryExpression, "Cannot apply unary operator ! to type " + type.name());
                     }
+                    break;
+                }
+                case INCREMENT:
+                case DECREMENT:
+                {
+                    if (type != DataType.INTEGER)
+                    {
+                        this.reportError(unaryExpression, "Cannot apply unary operator " + operator.name() + " to type " + type.name());
+                    }
+                    break;
                 }
             }
         }

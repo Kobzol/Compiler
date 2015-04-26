@@ -17,13 +17,13 @@ import tree.Variable;
  */
 public class UnaryExpression extends Expression {
     private final Expression expression;
-    private final UnaryOperator unaryOperator;
+    private UnaryOperator preOperator = UnaryOperator.NOOP;
+    private UnaryOperator postOperator = UnaryOperator.NOOP;
     
-    public UnaryExpression(int line, int column, Expression expression, UnaryOperator unaryOperator) {
+    public UnaryExpression(int line, int column, Expression expression) {
         super(line, column);
         
         this.expression = expression;
-        this.unaryOperator = unaryOperator;
     }
 
     public Expression getExpression()
@@ -31,9 +31,36 @@ public class UnaryExpression extends Expression {
         return expression;
     }
 
+    public UnaryOperator getPreOperator()
+    {
+        return preOperator;
+    }
+    
+    public UnaryOperator getPostOperator()
+    {
+        return postOperator;
+    }
+    
+    public void setPreOperator(UnaryOperator preOperator)
+    {
+        this.preOperator = preOperator;
+    }
+    public void setPostOperator(UnaryOperator postOperator)
+    {
+        this.postOperator = postOperator;
+    }
+    
+    public boolean hasTwoOperators()
+    {
+        return this.preOperator != UnaryOperator.NOOP && this.postOperator != UnaryOperator.NOOP;
+    }
     public UnaryOperator getUnaryOperator()
     {
-        return unaryOperator;
+        if (this.preOperator != UnaryOperator.NOOP)
+        {
+            return this.preOperator;
+        }
+        else return this.postOperator;
     }
     
     @Override
@@ -59,7 +86,7 @@ public class UnaryExpression extends Expression {
     {
         if (this.expression.isConstant())
         {
-            return VariableHelper.performUnaryOperation(new Variable(this.expression.getDataType(symbolTable), this.expression.getValue(symbolTable)), this.unaryOperator);
+            return VariableHelper.performUnaryOperation(new Variable(this.expression.getDataType(symbolTable), this.expression.getValue(symbolTable)), this.getUnaryOperator());
         }
         else return null;
     }
@@ -67,6 +94,6 @@ public class UnaryExpression extends Expression {
     @Override
     public boolean hasSideEffects()
     {
-        return this.expression.hasSideEffects();
+        return this.expression.hasSideEffects() || this.postOperator != UnaryOperator.NOOP;
     }
 }

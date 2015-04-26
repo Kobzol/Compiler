@@ -168,6 +168,8 @@ TOKEN :
 | < AND: "&&" >
 | < PLUS: "+" >
 | < MINUS: "-" >
+| < INCREMENT: "++" >
+| < DECREMENT: "--" >
 | < STAR: "*" >
 | < SLASH: "/" >
 | < REM: "%" >
@@ -370,45 +372,50 @@ Expression MultiplicativeExpression() :
 
 Expression UnaryExpression() :
 {
-    Token operator = new Token(), identifier, lparen;
+    Token preOperator = new Token(), postOperator = new Token(), identifier, lparen;
     Literal literal;
     Expression exp;
     UnaryExpression unaryExpression;
 }
 {
     (
-        (operator = <BANG> | operator = <MINUS>)
+        (preOperator = <BANG> | preOperator = <MINUS>)
     )?
 
     (
         (
             lparen = <LPAREN> exp = Expression() <RPAREN>
             {
-                unaryExpression = new UnaryExpression(lparen.beginLine, lparen.beginColumn, exp, UnaryOperator.getFromString(operator.image));
+                unaryExpression = new UnaryExpression(lparen.beginLine, lparen.beginColumn, exp);
             }
         ) |
         (
             literal = Literal()
             {
-                unaryExpression = new UnaryExpression(literal.getLine(), literal.getColumn(), literal, UnaryOperator.getFromString(operator.image));
+                unaryExpression = new UnaryExpression(literal.getLine(), literal.getColumn(), literal);
             }
         ) |
         LOOKAHEAD(2)
         (
             exp = FunctionCallExpression()
             {
-                unaryExpression = new UnaryExpression(exp.getLine(), exp.getColumn(), exp, UnaryOperator.getFromString(operator.image));
+                unaryExpression = new UnaryExpression(exp.getLine(), exp.getColumn(), exp);
             }
         ) |
         (
             identifier = <IDENTIFIER>
             {
                 unaryExpression = new UnaryExpression(identifier.beginLine, identifier.beginColumn,
-                                           new IdentifierExpression(identifier.beginLine, identifier.beginColumn, identifier.image), UnaryOperator.getFromString(operator.image));
+                                           new IdentifierExpression(identifier.beginLine, identifier.beginColumn, identifier.image));
             }
+            (
+                (postOperator = <DECREMENT> | postOperator = <INCREMENT>)
+            )?
         )
     )
     {
+        unaryExpression.setPreOperator(UnaryOperator.getFromString(preOperator.image));
+        unaryExpression.setPostOperator(UnaryOperator.getFromString(postOperator.image));
         return unaryExpression;
     }
 }

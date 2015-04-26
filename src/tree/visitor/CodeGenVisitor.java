@@ -32,6 +32,11 @@ import tree.expression.BinaryOperator;
 import tree.expression.DataType;
 import tree.expression.Expression;
 import tree.expression.FunctionCallExpression;
+import tree.expression.UnaryOperator;
+import static tree.expression.UnaryOperator.DECREMENT;
+import static tree.expression.UnaryOperator.INCREMENT;
+import static tree.expression.UnaryOperator.MINUS;
+import static tree.expression.UnaryOperator.NEGATE;
 import tree.statement.BlockStatement;
 import tree.statement.ForStatement;
 import tree.statement.FunctionStatement;
@@ -375,8 +380,9 @@ public class CodeGenVisitor extends AbstractVisitor {
             else
             {
                 unaryExpression.getExpression().accept(this);
-
-                switch (unaryExpression.getUnaryOperator())
+                UnaryOperator operator = unaryExpression.getUnaryOperator();
+                
+                switch (operator)
                 {
                     case MINUS:
                     {
@@ -387,6 +393,17 @@ public class CodeGenVisitor extends AbstractVisitor {
                     {
                         this.instructionGenerator.addOperator(InstructionType.NEGATE);
                         break;
+                    }
+                    case INCREMENT:
+                    case DECREMENT:
+                    {
+                        IdentifierExpression identifier = (IdentifierExpression) unaryExpression.getExpression();
+                        VariableInfo variable = this.symbolTable.getVariable(identifier.getIdentifier());
+                        
+                        this.instructionGenerator.loadVariable(variable.getAddress());
+                        this.instructionGenerator.pushLiteral(DataType.INTEGER, operator == UnaryOperator.INCREMENT ? 1 : -1);
+                        this.instructionGenerator.addOperator(InstructionType.ADD);
+                        this.instructionGenerator.saveVariable(variable.getAddress());
                     }
                 }
             }

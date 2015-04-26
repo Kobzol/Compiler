@@ -12,6 +12,8 @@ package tree.expression;
 public enum UnaryOperator {
     MINUS,
     NEGATE,
+    INCREMENT,
+    DECREMENT,
     NOOP;
     
     public static UnaryOperator getFromString(String data)
@@ -20,13 +22,13 @@ public enum UnaryOperator {
         {
             return UnaryOperator.NOOP;
         }
-        else if (data.equals("-"))
+        
+        switch (data)
         {
-            return UnaryOperator.MINUS;
-        }
-        else if (data.equals("!"))
-        {
-            return UnaryOperator.NEGATE;
+            case "-": return MINUS; 
+            case "!": return NEGATE;
+            case "++": return INCREMENT;
+            case "--": return DECREMENT;
         }
         
         return null;
