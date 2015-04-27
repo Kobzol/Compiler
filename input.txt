@@ -10,6 +10,3 @@ begin
 end;
 
 write factorial(5);*/
-
-int a = 5, b = 6, c = 7;
-write a, b, c;

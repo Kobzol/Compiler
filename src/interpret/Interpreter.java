@@ -39,6 +39,10 @@ public class Interpreter {
         {
             this.allocatedVariables++;
         }
+        public void increaseAllocatedVariables(int count)
+        {
+            this.allocatedVariables += count;
+        }
     }
     
     private final List<Variable> programStack = new ArrayList<Variable>();
@@ -362,6 +366,7 @@ public class Interpreter {
         
         int parameterCount = Integer.parseInt(instruction.arguments.get(0).toString());
         this.stackFrames.push(new StackFrame(this.programStack.size() - parameterCount));
+        this.getStackFrame().increaseAllocatedVariables(parameterCount);
     }
     private void handleDestroyFrame(Instruction instruction) throws InterpretException
     {
